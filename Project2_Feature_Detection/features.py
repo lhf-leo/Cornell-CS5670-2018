@@ -3,8 +3,8 @@ import math
 import cv2
 import numpy as np
 import scipy
+import math
 from scipy import ndimage, spatial
-
 import transformations
 
 
@@ -97,7 +97,7 @@ class HarrisKeypointDetector(KeypointDetector):
         # Add in the harris keypoints as red
         outImage[:, :, 2] += harrisImage * (4 * 255 / (np.max(harrisImage)) + 1e-50)
         cv2.imwrite("harris.png", outImage)
-
+        
     # Compute harris values of an image.
     def computeHarrisValues(self, srcImage):
         '''
@@ -111,7 +111,6 @@ class HarrisKeypointDetector(KeypointDetector):
                                 gradient at each pixel in degrees.
         '''
         height, width = srcImage.shape[:2]
-
         harrisImage = np.zeros(srcImage.shape[:2])
         orientationImage = np.zeros(srcImage.shape[:2])
 
@@ -119,13 +118,16 @@ class HarrisKeypointDetector(KeypointDetector):
         # each pixel and store in 'harrisImage'.  See the project page
         # for direction on how to do this. Also compute an orientation
         # for each pixel and store it in 'orientationImage.'
-        # TODO-BLOCK-BEGIN
-        raise Exception("TODO in features.py not implemented")
-        # TODO-BLOCK-END
-
-        # Save the harris image as harris.png for the website assignment
+        dx = ndimage.sobel(srcImage, 0)
+        dy = ndimage.sobel(srcImage, 1)
+        dxx, dyy, dxy = dx ** 2, dy ** 2, dx * dy
+        dxx_w = ndimage.gaussian_filter(dxx, sigma = 0.5, truncate = 3.0)
+        dyy_w = ndimage.gaussian_filter(dyy, sigma = 0.5, truncate = 3.0)
+        dxy_w = ndimage.gaussian_filter(dxy, sigma = 0.5, truncate = 3.0)
+        harrisImage = dxx_w * dyy_w - dxy_w ** 2 - 0.1 * (dxx_w + dyy_w) ** 2
+        orientationImage = np.rad2deg(np.arctan2(dx, dy))
         self.saveHarrisImage(harrisImage, srcImage)
-
+        
         return harrisImage, orientationImage
 
     def computeLocalMaxima(self, harrisImage):
@@ -142,9 +144,10 @@ class HarrisKeypointDetector(KeypointDetector):
         destImage = np.zeros_like(harrisImage, np.bool)
 
         # TODO 2: Compute the local maxima image
-        # TODO-BLOCK-BEGIN
-        raise Exception("TODO in features.py not implemented")
-        # TODO-BLOCK-END
+        local_max = ndimage.maximum_filter(harrisImage, size = (7, 7))
+        for i in range(harrisImage.shape[0]):
+            for j in range(harrisImage.shape[1]):
+                if local_max[i, j] == harrisImage[i, j]: destImage[i, j] = True
 
         return destImage
 
@@ -190,9 +193,10 @@ class HarrisKeypointDetector(KeypointDetector):
                 # data here. Set f.size to 10, f.pt to the (x,y) coordinate,
                 # f.angle to the orientation in degrees and f.response to
                 # the Harris score
-                # TODO-BLOCK-BEGIN
-                raise Exception("TODO in features.py not implemented")
-                # TODO-BLOCK-END
+                f.size = 10
+                f.pt = (x, y)
+                f.angle = orientationImage[y, x]
+                f.response = harrisImage[y, x]
 
                 features.append(f)
 
@@ -247,6 +251,10 @@ class SimpleFeatureDescriptor(FeatureDescriptor):
         grayImage = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         desc = np.zeros((len(keypoints), 5 * 5))
 
+        windowSize = 5
+        paddingSize = windowSize // 2
+        paddingImage = np.zeros((image.shape[0] + paddingSize * 2, image.shape[1] + paddingSize * 2))
+        paddingImage[paddingSize:image.shape[0] + paddingSize, paddingSize: image.shape[1] + paddingSize] = grayImage
         for i, f in enumerate(keypoints):
             x, y = f.pt
             x, y = int(x), int(y)
@@ -254,9 +262,8 @@ class SimpleFeatureDescriptor(FeatureDescriptor):
             # TODO 4: The simple descriptor is a 5x5 window of intensities
             # sampled centered on the feature point. Store the descriptor
             # as a row-major vector. Treat pixels outside the image as zero.
-            # TODO-BLOCK-BEGIN
-            raise Exception("TODO in features.py not implemented")
-            # TODO-BLOCK-END
+            sub = paddingImage[y : y + windowSize, x : x + windowSize]
+            desc[i, :] = sub.reshape((25,))
 
         return desc
 
@@ -281,30 +288,40 @@ class MOPSFeatureDescriptor(FeatureDescriptor):
         desc = np.zeros((len(keypoints), windowSize * windowSize))
         grayImage = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         grayImage = ndimage.gaussian_filter(grayImage, 0.5)
-
+        cnt = 0
         for i, f in enumerate(keypoints):
             # TODO 5: Compute the transform as described by the feature
             # location/orientation. You will need to compute the transform
             # from each pixel in the 40x40 rotated window surrounding
             # the feature to the appropriate pixels in the 8x8 feature
             # descriptor image.
-            transMx = np.zeros((2, 3))
 
-            # TODO-BLOCK-BEGIN
-            raise Exception("TODO in features.py not implemented")
-            # TODO-BLOCK-END
+            T2 = transformations.get_trans_mx(np.array([windowSize / 2, windowSize / 2, 0]))
+            S = transformations.get_scale_mx(0.2, 0.2, 1)
+            R = transformations.get_rot_mx(0, 0, -np.radians(f.angle))
+            T1 = transformations.get_trans_mx(np.array([-f.pt[0], -f.pt[1], 0]))
+            #T2 * S * R * T1
+            transMx = np.dot(np.dot(np.dot(T2,S),R), T1)
+            transMx = np.delete(transMx, 2, axis=1)[:2]
+
 
             # Call the warp affine function to do the mapping
             # It expects a 2x3 matrix
+
             destImage = cv2.warpAffine(grayImage, transMx,
                 (windowSize, windowSize), flags=cv2.INTER_LINEAR)
 
             # TODO 6: Normalize the descriptor to have zero mean and unit
             # variance. If the variance is zero then set the descriptor
             # vector to zero. Lastly, write the vector to desc.
-            # TODO-BLOCK-BEGIN
-            raise Exception("TODO in features.py not implemented")
-            # TODO-BLOCK-END
+            target = destImage[:8, :8]
+            target = target - np.mean(target)
+            # numeric issue, set a very small threshold instead of zero
+            if np.std(target) <= 10**(-5):
+                desc[i, :] = np.zeros((windowSize * windowSize,))
+            else:
+                target = target / np.std(target)
+                desc[i,:] = target.reshape(windowSize * windowSize)
 
         return desc
 
@@ -428,9 +445,19 @@ class SSDFeatureMatcher(FeatureMatcher):
         # the first image with the closest feature in the second image.
         # Note: multiple features from the first image may match the same
         # feature in the second image.
-        # TODO-BLOCK-BEGIN
-        raise Exception("TODO in features.py not implemented")
-        # TODO-BLOCK-END
+
+        for i in range(desc1.shape[0]):
+            u = desc1[i]
+            diff = desc2 - u
+            diff = diff ** 2
+            sum_diff = diff.sum(axis = 1)
+            dis = sum_diff ** 0.5
+            j = np.argmin(dis)
+            match = cv2.DMatch()
+            match.queryIdx = i
+            match.trainIdx = j
+            match.distance = dis[j]
+            matches.append(match)
 
         return matches
 
@@ -470,9 +497,17 @@ class RatioFeatureMatcher(FeatureMatcher):
         # Note: multiple features from the first image may match the same
         # feature in the second image.
         # You don't need to threshold matches in this function
-        # TODO-BLOCK-BEGIN
-        raise Exception("TODO in features.py not implemented")
-        # TODO-BLOCK-END
+        for i in range(desc1.shape[0]):
+            u = desc1[i]
+            diff = (desc2 - u) ** 2
+            sum_diff = diff.sum(axis = 1)
+            dis = sum_diff ** 0.5
+            sortedID = dis.argsort()
+            match = cv2.DMatch()
+            match.queryIdx = i
+            match.trainIdx = int(sortedID[0])
+            match.distance = dis[int(sortedID[0])] / dis[(sortedID[1])]
+            matches.append(match)
 
         return matches
 
@@ -485,3 +520,4 @@ class ORBFeatureMatcher(FeatureMatcher):
     def matchFeatures(self, desc1, desc2):
         return self.bf.match(desc1.astype(np.uint8), desc2.astype(np.uint8))
 
+        

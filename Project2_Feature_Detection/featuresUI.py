@@ -1,10 +1,10 @@
 import sys
 sys.path.append('/Users/kb/bin/opencv-3.1.0/build/lib/')
 
-import Tkinter as tk
-import tkFileDialog
-import tkMessageBox
-import ttk
+import tkinter as tk
+import tkinter.filedialog
+import tkinter.messagebox
+import tkinter.ttk
 import os
 import math
 import json
@@ -47,7 +47,7 @@ supportedFiletypes = [('JPEG Image', '*.jpg'), ('PNG Image', '*.png'),
 
 
 def error(msg):
-    tkMessageBox.showerror("Error", msg)
+    tkinter.messagebox.showerror("Error", msg)
 
 
 class CustomJSONEncoder(json.JSONEncoder):
@@ -199,22 +199,25 @@ class BaseFrame(tk.Frame):
         self.keypointLabel = tk.Label(self, text='Keypoint Type:')
         self.keypointTypeVar = tk.StringVar(self)
         self.keypointTypeVar.set(keypointClasses[0][0])
-        self.keypointOptions = apply(tk.OptionMenu, (self,
-            self.keypointTypeVar) + tuple(x[0] for x in keypointClasses))
+        # self.keypointOptions = apply(tk.OptionMenu, (self,
+        #     self.keypointTypeVar) + tuple(x[0] for x in keypointClasses))
+        self.keypointOptions = tk.OptionMenu(root, self.keypointTypeVar, *[x[0] for x in keypointClasses])
         self.keypointOptions.configure(width=BUTTON_WIDTH)
 
         self.descriptorLabel = tk.Label(self, text='Descriptor Type:')
         self.descriptorTypeVar = tk.StringVar(self)
         self.descriptorTypeVar.set(descriptorClasses[0][0])
-        self.descriptorOptions = apply(tk.OptionMenu, (self,
-            self.descriptorTypeVar) + tuple(x[0] for x in descriptorClasses))
+        # self.descriptorOptions = apply(tk.OptionMenu, (self,
+        #     self.descriptorTypeVar) + tuple(x[0] for x in descriptorClasses))
+        self.descriptorOptions = tk.OptionMenu(root, self.descriptorTypeVar, *[x[0] for x in descriptorClasses])
         self.descriptorOptions.configure(width=BUTTON_WIDTH)
 
         self.matcherLabel = tk.Label(self, text='Matcher Type:')
         self.matcherTypeVar = tk.StringVar(self)
         self.matcherTypeVar.set(matcherClasses[0][0])
-        self.matcherOptions = apply(tk.OptionMenu, (self, self.matcherTypeVar) +
-            tuple(x[0] for x in matcherClasses))
+        # self.matcherOptions = apply(tk.OptionMenu, (self, self.matcherTypeVar) +
+        #     tuple(x[0] for x in matcherClasses))
+        self.matcherOptions = tk.OptionMenu(root, self.matcherTypeVar, *[x[0] for x in matcherClasses])
         self.matcherOptions.configure(width=BUTTON_WIDTH)
 
         self.imageCanvas = ImageWidget(self)
@@ -288,7 +291,7 @@ class KeypointDetectionFrame(BaseFrame):
         self.keypoints = None
 
     def loadImage(self):
-        filename = tkFileDialog.askopenfilename(parent=self.root,
+        filename = tkinter.filedialog.askopenfilename(parent=self.root,
             filetypes=supportedFiletypes)
         if filename and os.path.isfile(filename):
             self.image = cv2.imread(filename)
@@ -308,7 +311,7 @@ class KeypointDetectionFrame(BaseFrame):
         threshold = self.getSelectedKpThreshold()
         if self.image is not None and self.keypoints is not None:
             kps = self.thresholdKeyPoints(self.keypoints, threshold)
-            img = cv2.drawKeypoints(self.image, kps,
+            img = cv2.drawKeypoints(self.image, kps, None,
                 flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS,
                 color=GREEN)
             self.imageCanvas.drawCVImage(img)
@@ -322,7 +325,7 @@ class KeypointDetectionFrame(BaseFrame):
 
     def screenshot(self):
         if self.image is not None:
-            filename = tkFileDialog.asksaveasfilename(parent=self.root,
+            filename = tkinter.filedialog.asksaveasfilename(parent=self.root,
                 filetypes=supportedFiletypes, defaultextension=".png")
             if filename:
                 self.imageCanvas.writeToFile(filename)
@@ -412,7 +415,7 @@ class FeatureMatchingFrame(BaseFrame):
         self.loadImage(1)
 
     def loadImage(self, index):
-        filename = tkFileDialog.askopenfilename(parent=self.root,
+        filename = tkinter.filedialog.askopenfilename(parent=self.root,
         filetypes=supportedFiletypes)
         if filename and os.path.isfile(filename):
             self.image[index] = cv2.imread(filename)
@@ -422,7 +425,7 @@ class FeatureMatchingFrame(BaseFrame):
 
     def screenshot(self):
         if self.image[0] is not None or self.image[1] is not None:
-            filename = tkFileDialog.asksaveasfilename(parent=self.root,
+            filename = tkinter.filedialog.asksaveasfilename(parent=self.root,
                 filetypes=supportedFiletypes, defaultextension=".png")
             if filename:
                 self.imageCanvas.writeToFile(filename)
@@ -571,7 +574,7 @@ class BenchmarkFrame(BaseFrame):
         self.currentDirectory = None
 
     def runBenchmarkClick(self):
-        dirpath = tkFileDialog.askdirectory(parent=self.root)
+        dirpath = tkinter.filedialog.askdirectory(parent=self.root)
         if not dirpath:
             return
         self.currentDirectory = dirpath
@@ -581,7 +584,7 @@ class BenchmarkFrame(BaseFrame):
 
     def screenshot(self):
         if self.roc_img is not None:
-            filename = tkFileDialog.asksaveasfilename(parent=self.root,
+            filename = tkinter.filedialog.asksaveasfilename(parent=self.root,
                 filetypes=supportedFiletypes, defaultextension=".png")
             if filename:
                 self.imageCanvas.writeToFile(filename)
@@ -608,7 +611,7 @@ class FeaturesUIFrame(tk.Frame):
         tk.Frame.__init__(self, parent)
         self.parent = parent
         self.root = root
-        self.notebook = ttk.Notebook(self.parent)
+        self.notebook = tkinter.ttk.Notebook(self.parent)
         self.keypointDetectionFrame = KeypointDetectionFrame(self.notebook, root)
         self.featureMatchingFrame = FeatureMatchingFrame(self.notebook, root)
         self.benchmarkFrame = BenchmarkFrame(self.notebook, root)

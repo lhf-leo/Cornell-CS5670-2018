@@ -118,7 +118,7 @@ def computeROCCurve(matches, isMatch, thresholds):
         actualError = 0
         total = 0
 
-        for j in xrange(len(matches)):
+        for j in range(len(matches)):
             if isMatch[j]:
                 actualCorrect += 1
                 if matches[j].distance < threshold:
@@ -141,7 +141,7 @@ def computeROCCurve(matches, isMatch, thresholds):
 def computeAUC(results):
     auc = 0
 
-    for i in xrange(1, len(results)):
+    for i in range(1, len(results)):
         falseRate, trueRate = results[i]
         falseRatePrev, trueRatePrev = results[i - 1]
         xdiff = falseRate - falseRatePrev
