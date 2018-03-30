@@ -11,7 +11,6 @@ class ImageInfo:
         self.img = img
         self.position = position
 
-
 def imageBoundingBox(img, M):
     """
        This is a useful helper function that you might choose to implement
@@ -29,7 +28,25 @@ def imageBoundingBox(img, M):
     """
     #TODO 8
     #TODO-BLOCK-BEGIN
-    raise Exception("TODO in blend.py not implemented")
+    
+    h, w = img.shape[0]-1, img.shape[1]-1
+    ul = np.array([[0, 0, 1]]).T
+    ur = np.array([[w, 0, 1]]).T
+    ll = np.array([[0, h, 1]]).T
+    lr = np.array([[w, h, 1]]).T
+    ul_t = np.dot(M, ul)
+    ur_t = np.dot(M, ur)
+    ll_t = np.dot(M, ll)
+    lr_t = np.dot(M, lr)
+    ul_t/=ul_t[-1]
+    ur_t/=ur_t[-1]
+    ll_t/=ll_t[-1]
+    lr_t/=lr_t[-1]
+    minX = min(ul_t[0], ur_t[0], ll_t[0], lr_t[0])
+    minY = min(ul_t[1], ur_t[1], ll_t[1], lr_t[1])
+    maxX = max(ul_t[0], ur_t[0], ll_t[0], lr_t[0])
+    maxY = max(ul_t[1], ur_t[1], ll_t[1], lr_t[1])
+
     #TODO-BLOCK-END
     return int(minX), int(minY), int(maxX), int(maxY)
 
@@ -49,7 +66,31 @@ def accumulateBlend(img, acc, M, blendWidth):
     # BEGIN TODO 10
     # Fill in this routine
     #TODO-BLOCK-BEGIN
-    raise Exception("TODO in blend.py not implemented")
+    
+    h, w = img.shape[0]-1, img.shape[1]-1
+    min_x, min_y, max_x, max_y = imageBoundingBox(img, M)
+
+    for i in range(min_x, max_x):
+        for j in range(min_y, max_y):
+            p = np.array([i, j, 1], dtype=float)
+            p_source = np.dot(np.linalg.inv(M), p)
+            p_source //= p_source[-1]
+            x, y = p_source[:2]
+            if 0 <= x < w and 0 <= y < h:
+                weight = 1.0
+                pos = float(min(i-min_x, max_x-i))
+                if (pos < blendWidth):
+                    weight = pos / blendWidth
+
+                ### TODO-need more work here
+                x, y = int(x), int(y)
+                if img[y, x, 0] == 0 and img[y, x, 1] == 0 and img[y, x, 2] == 0:
+                    weight = 0.0
+
+                for c in range(3):
+                    acc[j, i, c] += weight * img[y, x, c]
+                acc[j,i,3] += weight
+
     #TODO-BLOCK-END
     # END TODO
 
@@ -65,7 +106,16 @@ def normalizeBlend(acc):
     # BEGIN TODO 11
     # fill in this routine..
     #TODO-BLOCK-BEGIN
-    raise Exception("TODO in blend.py not implemented")
+    
+    h, w = acc.shape[:2]
+    img = np.zeros((h, w, 3))
+    for i in range(h):
+        for j in range(w):
+            if acc[i,j,3] > 0:
+                for c in range(3):
+                    img[i, j, c] = (acc[i, j, c] / acc[i, j, -1])
+    img = np.uint8(img)
+
     #TODO-BLOCK-END
     # END TODO
     return img
@@ -107,7 +157,13 @@ def getAccSize(ipv):
         # BEGIN TODO 9
         # add some code here to update minX, ..., maxY
         #TODO-BLOCK-BEGIN
-        raise Exception("TODO in blend.py not implemented")
+        
+        _minX, _minY, _maxX, _maxY = imageBoundingBox(img, M)
+        minX = min(minX, _minX)
+        minY = min(minY, _minY)
+        maxX = max(maxX, _maxX)
+        maxY = max(maxY, _maxY)
+
         #TODO-BLOCK-END
         # END TODO
 
@@ -199,7 +255,9 @@ def blendImages(ipv, blendWidth, is360=False, A_out=None):
     # Note: warpPerspective does forward mapping which means A is an affine
     # transform that maps accumulator coordinates to final panorama coordinates
     #TODO-BLOCK-BEGIN
-    raise Exception("TODO in blend.py not implemented")
+    
+    if is360: A = computeDrift(x_init, y_init, x_final, y_final, width)
+
     #TODO-BLOCK-END
     # END TODO
 

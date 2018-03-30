@@ -71,7 +71,22 @@ def computeSphericalWarpMappings(dstShape, f, k1, k2):
     # as output for your code. They should all have the shape
     # (img_height, img_width)
     # TODO-BLOCK-BEGIN
-    raise Exception("TODO in warp.py not implemented")
+
+    ## Compute the Euclidean coordinates
+    _x = np.sin(xf) * np.cos(yf)
+    _y = np.sin(yf)
+    _z = np.cos(xf) * np.cos(yf)
+
+    ## project
+    x = _x/_z
+    y = _y/_z
+    z = 1
+
+    ## apply radial distortion
+    r2 = x ** 2 + y ** 2
+    xt = x * (1 + k1*r2 + k2*r2*r2)
+    yt = y * (1 + k1*r2 + k2*r2*r2)
+
     # TODO-BLOCK-END
     # END TODO
     # Convert back to regular pixel coordinates

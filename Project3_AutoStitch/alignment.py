@@ -42,7 +42,21 @@ def computeHomography(f1, f2, matches, A_out=None):
         #Fill in the matrix A in this loop.
         #Access elements using square brackets. e.g. A[0,0]
         #TODO-BLOCK-BEGIN
-        raise Exception("TODO in alignment.py not implemented")
+        r1, r2 = 2*i, 2*i+1
+        A[r1][0] = a_x
+        A[r1][1] = a_y
+        A[r1][2] = 1
+        A[r1][6] = -b_x * a_x
+        A[r1][7] = -b_x * a_y
+        A[r1][8] = -b_x
+
+        A[r2][3] = a_x
+        A[r2][4] = a_y
+        A[r2][5] = 1
+        A[r2][6] = -b_y * a_x
+        A[r2][7] = -b_y * a_y
+        A[r2][8] = -b_y
+
         #TODO-BLOCK-END
         #END TODO
 
@@ -62,7 +76,12 @@ def computeHomography(f1, f2, matches, A_out=None):
     #BEGIN TODO 3
     #Fill the homography H with the appropriate elements of the SVD
     #TODO-BLOCK-BEGIN
-    raise Exception("TODO in alignment.py not implemented")
+    
+    #solve for unit vector
+    # h = Vt[-1] / Vt[-1][-1]
+    h = Vt[-1]
+    H = h.reshape(H.shape)
+
     #TODO-BLOCK-END
     #END TODO
 
@@ -103,7 +122,25 @@ def alignPair(f1, f2, matches, m, nRANSAC, RANSACthresh):
     #This function should also call get_inliers and, at the end,
     #least_squares_fit.
     #TODO-BLOCK-BEGIN
-    raise Exception("TODO in alignment.py not implemented")
+    
+    maxInliers = []
+    for i in range(nRANSAC):
+        if m == eHomography:
+            sample_matches = np.random.choice(matches, 4)
+            H = computeHomography(f1, f2, sample_matches)
+        elif m == eTranslate:
+            match = np.random.choice(matches)
+            H = np.eye(3)
+            H[0][2] = f2[match.trainIdx].pt[0] - f1[match.queryIdx].pt[0]
+            H[1][2] = f2[match.trainIdx].pt[1] - f1[match.queryIdx].pt[1]
+        else:
+            raise Exception("Error: Invalid motion model.")
+
+        inliers = getInliers(f1, f2, matches, H, RANSACthresh)
+        if len(inliers) > len(maxInliers): maxInliers = inliers
+
+    M = leastSquaresFit(f1, f2, matches, m, maxInliers)
+
     #TODO-BLOCK-END
     #END TODO
     return M
@@ -138,7 +175,17 @@ def getInliers(f1, f2, matches, M, RANSACthresh):
         #by M, is within RANSACthresh of its match in f2.
         #If so, append i to inliers
         #TODO-BLOCK-BEGIN
-        raise Exception("TODO in alignment.py not implemented")
+        
+        match = matches[i]
+        f1_hom = np.array(list(f1[match.queryIdx].pt) + [1]) 
+        f2_hom = np.array(list(f2[match.queryIdx].pt) + [1]) 
+        translated = np.dot(M, f1_hom)
+        translated = translated / translated[-1]
+
+        dist = np.linalg.norm(translated - f2_hom)
+        if dist <= RANSACthresh:
+            inlier_indices.append(i)
+
         #TODO-BLOCK-END
         #END TODO
 
@@ -183,7 +230,13 @@ def leastSquaresFit(f1, f2, matches, m, inlier_indices):
             #Use this loop to compute the average translation vector
             #over all inliers.
             #TODO-BLOCK-BEGIN
-            raise Exception("TODO in alignment.py not implemented")
+            
+            p1 = f1[matches[i].queryIdx].pt
+            p2 = f2[matches[i].trainIdx].pt
+
+            u += (p2[0] - p1[0])
+            v += (p2[1] - p1[1])
+
             #TODO-BLOCK-END
             #END TODO
 
@@ -198,7 +251,10 @@ def leastSquaresFit(f1, f2, matches, m, inlier_indices):
         #Compute a homography M using all inliers.
         #This should call computeHomography.
         #TODO-BLOCK-BEGIN
-        raise Exception("TODO in alignment.py not implemented")
+        
+        matches_in = [matches[idx] for idx in inlier_indices]
+        M = computeHomography(f1, f2, matches_in)
+
         #TODO-BLOCK-END
         #END TODO
 
