@@ -32,10 +32,22 @@ def compute_photometric_stereo_impl(lights, images):
         normals -- float32 height x width x 3 image with dimensions matching
                    the input images.
     """
-    raise NotImplementedError()
-
-
-
+    height, width, channel = images[0].shape
+    albedo = np.zeros((height, width, channel))
+    normals = np.zeros((height, width, 3))
+    L = lights.T
+    left = np.linalg.inv(L.T.dot(L))
+    for i in range(height):
+        for j in range(width):
+            for c in range(channel):
+                I = [img[i,j,c] for img in images]
+                G = left.dot(L.T.dot(I))
+                k = np.linalg.norm(G)
+                if k < 1e-7: k = 0
+                else: normals[i][j] += G/k
+                albedo[i][j][c] = k
+    normals /= channel
+    return albedo, normals
 
 def project_impl(K, Rt, points):
     """
@@ -47,9 +59,18 @@ def project_impl(K, Rt, points):
     Output:
         projections -- height x width x 2 array of 2D projections
     """
-    raise NotImplementedError()
+    height, width, _ = points.shape
+    projections = np.zeros((height, width, 2))
+    projection_matrix = K.dot(Rt)
 
+    for h in range(height):
+        for w in range(width):
+            p = np.append(points[h, w], 1)
+            p = projection_matrix.dot(p)
+            projections[h, w, 0] = p[0] / p[2]
+            projections[h, w, 1] = p[1] / p[2]
 
+    return projections
 
 def preprocess_ncc_impl(image, ncc_size):
     """
@@ -100,7 +121,24 @@ def preprocess_ncc_impl(image, ncc_size):
     Output:
         normalized -- heigth x width x (channels * ncc_size**2) array
     """
-    raise NotImplementedError()
+    height, width, channel = image.shape
+    normalized = np.zeros((height, width, channel * ncc_size ** 2))
+    window_offset = ncc_size // 2
+
+    for i in range(window_offset, height-window_offset):
+        for j in range(window_offset, width-window_offset):
+            new_vec = []
+            for c in range(channel):
+                patch = image[i-window_offset:i+window_offset+1, j-window_offset: j+window_offset+1, c]
+                mean = np.mean(patch)
+                new_vec=np.append(new_vec, [(patch - mean).flatten()])
+
+            l2 = np.linalg.norm(new_vec)
+            if l2 < 1e-6:
+                normalized[i, j] = np.zeros((new_vec.shape))
+            else: 
+                normalized[i, j] = new_vec / l2
+    return normalized
 
 
 def compute_ncc_impl(image1, image2):
@@ -115,119 +153,78 @@ def compute_ncc_impl(image1, image2):
         ncc -- height x width normalized cross correlation between image1 and
                image2.
     """
-    raise NotImplementedError()
+    height, width, _ = image1.shape
+    ncc = np.zeros((height, width))
+    for i in range(height):
+        for j in range(width):
+            ncc[i, j] = np.correlate(image1[i, j], image2[i, j])[0]
+    return ncc
 
 
 def form_poisson_equation_impl(height, width, alpha, normals, depth_weight, depth):
-    """
-    For 4-credit students only
-    Creates a Poisson equation given the normals and depth at every pixel in image.
-    The solution to Poisson equation is the estimated depth. 
-    When the mode, is 'depth' in 'combine.py', the equation should return the actual depth.
-    When it is 'normals', the equation should integrate the normals to estimate depth.
-    When it is 'both', the equation should weight the contribution from normals and actual depth,
-    using  parameter 'depth_weight'.
-
-    Input:
-        height -- height of input depth,normal array
-        width -- width of input depth,normal array
-        alpha -- stores alpha value of at each pixel of image. 
-            If alpha = 0, then the pixel normal/depth should not be 
-            taken into consideration for depth estimation
-        normals -- stores the normals(nx,ny,nz) at each pixel of image
-            None if mode is 'depth' in combine.py
-        depth_weight -- parameter to tradeoff between normals and depth when estimation mode is 'both'
-            High weight to normals mean low depth_weight.
-            Giving high weightage to normals will result in smoother surface, but surface may be very different from
-            what the input depthmap shows.
-        depth -- stores the depth at each pixel of image
-            None if mode is 'normals' in combine.py
-    Output:
-        constants for equation of type Ax = b
-        A -- left-hand side coefficient of the Poisson equation 
-            note that A can be a very large but sparse matrix so csr_matrix is used to represent it.
-        b -- right-hand side constant of the the Poisson equation
-    """
-
     assert alpha.shape == (height, width)
     assert normals is None or normals.shape == (height, width, 3)
     assert depth is None or depth.shape == (height, width)
 
-    '''
-    Since A matrix is sparse, instead of filling matrix, we assign values to a non-zero elements only.
-    For each non-zero element in matrix A, if A[i,j] = v, there should be some index k such that, 
-        row_ind[k] = i
-        col_ind[k] = j
-        data_arr[k] = v
-    Fill these values accordingly
-    '''
     row_ind = []
     col_ind = []
     data_arr = []
-    '''
-    For each row in the system of equation fill the appropriate value for vector b in that row
-    '''
     b = []
     if depth_weight is None:
         depth_weight = 1
+        
+    count = 0
+    if normals is not None:
+        for i in range(height):
+            for j in range(width - 1):
+                p1 = alpha[i, j]
+                p2 = alpha[i, j + 1]
+                if not p1 or not p2: continue
 
-    '''
-    TODO
-    Create a system of linear equation to estimate depth using normals and crude depth Ax = b
+                n1 = normals[i, j, 0]
+                n2 = -normals[i, j, 2]
+                row_ind.append(count)
+                row_ind.append(count)
+                col_ind.append(i * width + j)
+                col_ind.append(i * width + j + 1)
+                data_arr.append(-n2)
+                data_arr.append(n2)
+                b.append(-n1)
+                count += 1
 
-    x is a vector of depths at each pixel in the image and will have shape (height*width)
+        for i in range(height - 1):
+            for j in range(width):
+                p1 = alpha[i, j]
+                p2 = alpha[i + 1, j]
+                if not p1 or not p2: continue
 
-    If mode is 'depth':
-        > Each row in A and b corresponds to an equation at a single pixel
-        > For each pixel k, 
-            if pixel k has alpha value zero do not add any new equation.
-            else, fill row in b with depth_weight*depth[k] and fill column k of the corresponding
-                row in A with depth_weight.
+                n1 = -normals[i, j, 1]
+                n2 = -normals[i, j, 2]
+                row_ind.append(count)
+                row_ind.append(count)
+                col_ind.append(i * width + j)
+                col_ind.append((i + 1) * width + j)
+                data_arr.append(-n2)
+                data_arr.append(n2)
+                b.append(-n1)
+                count += 1
 
-        Justification: 
-            Since all the elements except k in a row is zero, this reduces to 
-                depth_weight*x[k] = depth_weight*depth[k]
-            you may see that, solving this will give x with values exactly same as the depths, 
-            at pixels where alpha is non-zero, then why do we need 'depth_weight' in A and b?
-            The answer to this will become clear when this will be reused in 'both' mode
+    if depth is not None:
+        for i in range(height):
+            for j in range(width):
+                if not alpha[i, j]: continue
 
-    Note: The normals in image are +ve when they are along an +x,+y,-z axes, if seen from camera's viewpoint.
-    If mode is 'normals':
-        > Each row in A and b corresponds to an equation of relationship between adjacent pixels
-        > For each pixel k and its immideate neighbour along x-axis l
-            if any of the pixel k or pixel l has alpha value zero do not add any new equation.
-            else, fill row in b with nx[k] (nx is x-component of normal), fill column k of the corresponding
-                row in A with -nz[k] and column k+1 with value nz[k]
-        > Repeat the above along the y-axis as well, except nx[k] should be -ny[k].
+                row_ind.append(count)
+                col_ind.append(i * width + j)
+                data_arr.append(depth_weight)
+                b.append(depth_weight * depth[i, j])
+                count += 1
 
-        Justification: Assuming the depth to be smooth and almost planar within one pixel width.
-        The normal projected in xz-plane at pixel k is perpendicular to tangent of surface in xz-plane.
-        In other word if n = (nx,ny,-nz), its projection in xz-plane is (nx,nz) and if tangent t = (tx,0,tz),
-            then n.t = 0, therefore nx/-nz = -tz/tx
-        Therefore the depth change with change of one pixel width along x axis should be proporational to tz/tx = -nx/nz
-        In other words (depth[k+1]-depth[k])*nz[k] = nx[k]
-        This is exactly what the equation above represents.
-        The negative sign in ny[k] is because the indexing along the y-axis is opposite of +y direction.
+    row_ind = np.array(row_ind)
+    col_ind = np.array(col_ind)
+    data_arr = np.array(data_arr)
+    b = np.array(b)
 
-    If mode is 'both':
-        > Do both of the above steps.
-
-        Justification: The depth will provide a crude estimate of the actual depth. The normals do the smoothing of depth map
-        This is why 'depth_weight' was used above in 'depth' mode. 
-            If the 'depth_weight' is very large, we are going to give preference to input depth map.
-            If the 'depth_weight' is close to zero, we are going to give preference normals.
-    '''
-    #TODO Block Begin
-    #fill row_ind,col_ind,data_arr,b
-    raise NotImplementedError()
-    #TODO Block end
-    # Convert all the lists to numpy array
-    row_ind = np.array(row_ind, dtype=np.int32)
-    col_ind = np.array(col_ind, dtype=np.int32)
-    data_arr = np.array(data_arr, dtype=np.float32)
-    b = np.array(b, dtype=np.float32)
-
-    # Create a compressed sparse matrix from indices and values
-    A = csr_matrix((data_arr, (row_ind, col_ind)), shape=(row, width * height))
-
+    A = csr_matrix((data_arr, (row_ind, col_ind)), shape=(count, width * height))
+ 
     return A, b
